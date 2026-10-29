@@ -1,0 +1,7 @@
+node_modules
+.next
+package-lock.json
+agent-docs/EncorePass_Development_Spec.md
+test-results
+playwright-report
+run

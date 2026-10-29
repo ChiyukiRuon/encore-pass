@@ -1,0 +1,16 @@
+services:
+    encore-pass:
+        build: .
+        ports:
+            - '127.0.0.1:3000:3000'
+        env_file: .env.local
+        restart: unless-stopped
+        read_only: true
+        tmpfs:
+            - /tmp:size=64m
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        mem_limit: 1g
+        cpus: 2

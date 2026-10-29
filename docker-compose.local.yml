@@ -1,0 +1,4 @@
+services:
+    encore-pass:
+        volumes:
+            - ./secrets:/run/secrets:ro

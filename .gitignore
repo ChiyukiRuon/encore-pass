@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+coverage/
+test-results/
+playwright-report/
+.playwright-mcp/
+.env*
+!.env.example
+secrets/
+*.pem
+*.p12
+*.key
+*.tsbuildinfo
+run/
+.idea/
