@@ -106,9 +106,13 @@ export function TicketPreview({ draft }: { draft: TicketDraft }) {
     const maskOpacity = usesBackgroundMask(draft)
         ? appearance.backgroundMaskOpacity
         : 0
-    const startTime = posterLayout
-        ? fields.secondaryFields.find((field) => field.key === 'starts')?.value
-        : undefined
+    // The header always keeps two lines. With a start time the value sits above
+    // it and the 日期 label is dropped; without one the label stays.
+    const headerTime =
+        posterLayout && !genericPoster
+            ? fields.secondaryFields.find((field) => field.key === 'starts')
+                  ?.value
+            : undefined
     const seats = [
         { label: '区', value: draft.section },
         { label: '排', value: draft.row },
@@ -221,17 +225,19 @@ export function TicketPreview({ draft }: { draft: TicketDraft }) {
                                     className="pass-header-field"
                                     key={field.key}
                                 >
-                                    <p className="pass-label">{field.label}</p>
+                                    {!headerTime && (
+                                        <p className="pass-label">
+                                            {field.label}
+                                        </p>
+                                    )}
                                     <span className="pass-value">
                                         {field.value}
                                     </span>
-                                    {posterLayout &&
-                                        !genericPoster &&
-                                        startTime && (
-                                            <span className="pass-header-time">
-                                                {startTime}
-                                            </span>
-                                        )}
+                                    {headerTime && (
+                                        <span className="pass-header-time">
+                                            {headerTime}
+                                        </span>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -272,15 +278,29 @@ export function TicketPreview({ draft }: { draft: TicketDraft }) {
                                     )}
                                     <footer className="pass-event-footer">
                                         <div className="pass-event-seats">
-                                            {seats.map((seat) => (
-                                                <div
-                                                    className="pass-event-seat"
-                                                    key={seat.label}
-                                                >
-                                                    <p>{seat.label}</p>
-                                                    <span>{seat.value}</span>
-                                                </div>
-                                            ))}
+                                            {seats.length > 0
+                                                ? seats.map((seat) => (
+                                                      <div
+                                                          className="pass-event-seat"
+                                                          key={seat.label}
+                                                      >
+                                                          <p>{seat.label}</p>
+                                                          <span>
+                                                              {seat.value}
+                                                          </span>
+                                                      </div>
+                                                  ))
+                                                : draft.eventName && (
+                                                      // Without seat fields the band
+                                                      // keeps its main line: the
+                                                      // event name fills the row.
+                                                      <div className="pass-event-seat">
+                                                          <p>活动</p>
+                                                          <span>
+                                                              {draft.eventName}
+                                                          </span>
+                                                      </div>
+                                                  )}
                                         </div>
                                         <div className="pass-event-bottom">
                                             {draft.venueName && (

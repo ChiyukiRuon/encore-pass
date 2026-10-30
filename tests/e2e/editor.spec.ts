@@ -343,6 +343,31 @@ test('switches layouts when the barcode switch or the style changes', async ({
     await expect(page.locator('.pass-background-clear')).toHaveCount(0)
 })
 
+test('shows the event name in the poster event band when seats are empty', async ({
+    page,
+}) => {
+    const image = resolve('tests/fixtures/generated/ticket.png')
+    await page.goto('/')
+    await page.getByRole('textbox', { name: '活动名称' }).fill('海报活动测试')
+    await page.getByLabel('场馆', { exact: true }).fill('示例音乐厅')
+    await page
+        .getByRole('button', { name: '活动门票(海报)', exact: true })
+        .click()
+    await chooseImage(page, '背景图片', image)
+    await page.getByRole('switch', { name: '显示条码' }).check()
+    await page.getByLabel('条码内容', { exact: true }).fill('POSTER-EVENT-TEST')
+    await expect(page.locator('.pass[data-layout="poster"]')).toBeVisible()
+    const band = page.locator('.pass-event-footer')
+    // Without region, row or seat the band keeps its main line: the event name.
+    await expect(band.locator('.pass-event-seat p')).toHaveText('活动')
+    await expect(band).toContainText('海报活动测试')
+    await expect(band.locator('.pass-event-bottom')).toHaveText('示例音乐厅')
+    // Seat fields replace the event-name line with the seat columns.
+    await page.getByLabel('区域', { exact: true }).fill('A')
+    await expect(band.locator('.pass-event-seat p')).toHaveText('区')
+    await expect(band).not.toContainText('海报活动测试')
+})
+
 test('lays out 通用凭证 as a native poster generic band', async ({ page }) => {
     const image = resolve('tests/fixtures/generated/ticket.png')
     await page.goto('/')
@@ -368,6 +393,8 @@ test('lays out 通用凭证 as a native poster generic band', async ({ page }) =
     await expect(fields).toHaveCount(4)
     await expect(fields.nth(0)).toContainText('通用海报测试')
     await expect(fields.nth(3)).toContainText('座位')
+    await expect(fields.nth(0)).toHaveCSS('text-align', 'start')
+    await expect(fields.nth(3)).toHaveCSS('text-align', 'right')
     await expect(page.locator('.pass-generic-bottom')).toHaveText(
         '示例音乐厅',
     )
@@ -387,6 +414,92 @@ test('lays out 通用凭证 as a native poster generic band', async ({ page }) =
     await expect(page.locator('.pass-identity-text')).toHaveText(
         'Example Artist',
     )
+})
+
+test('keeps a lone 通用凭证 event field left-aligned in the poster band', async ({
+    page,
+}) => {
+    const image = resolve('tests/fixtures/generated/ticket.png')
+    await page.goto('/')
+    await page.getByRole('textbox', { name: '活动名称' }).fill('通用海报测试')
+    await page.getByRole('button', { name: '通用凭证' }).click()
+    await chooseImage(page, '背景图片', image)
+    await expect(page.locator('.pass[data-layout="poster"]')).toBeVisible()
+    // Without region, row or seat the event label and value stay left; only a
+    // trailing seat column hugs the right edge.
+    const fields = page.locator('.pass-generic-fields > div')
+    await expect(fields).toHaveCount(1)
+    await expect(fields.first()).toHaveCSS('text-align', 'start')
+    await expect(fields.first().locator('.pass-label')).toHaveCSS(
+        'text-align',
+        'start',
+    )
+    await page.getByLabel('区域', { exact: true }).fill('A')
+    await expect(fields).toHaveCount(2)
+    await expect(fields.first()).toHaveCSS('text-align', 'start')
+    await expect(fields.last()).toHaveCSS('text-align', 'right')
+})
+
+test('keeps the header date at the right edge without a logo or artist', async ({
+    page,
+}) => {
+    const image = resolve('tests/fixtures/generated/ticket.png')
+    await page.goto('/')
+    await page.getByRole('textbox', { name: '活动名称' }).fill('通用海报测试')
+    await page.getByLabel('开演时间').fill('2026-12-12T19:30')
+    await page.getByRole('button', { name: '通用凭证' }).click()
+    await chooseImage(page, '背景图片', image)
+    await expect(page.locator('.pass[data-layout="poster"]')).toBeVisible()
+    await expect(page.locator('.pass-identity')).toHaveCount(0)
+    await expect(page.locator('.pass-header-field')).toContainText('日期')
+    // The lone date column still hugs the header's right padding.
+    const header = (await page.locator('.pass-header').boundingBox())!
+    const field = (await page.locator('.pass-header-field').boundingBox())!
+    expect(field.x).toBeGreaterThan(header.x + header.width / 2)
+    expect(header.x + header.width - (field.x + field.width)).toBeLessThan(20)
+})
+
+test('stacks the poster event header date and time without the date label', async ({
+    page,
+}) => {
+    const image = resolve('tests/fixtures/generated/ticket.png')
+    await page.goto('/')
+    await page.getByRole('textbox', { name: '活动名称' }).fill('海报活动测试')
+    await page
+        .getByLabel('艺人 / 主办方', { exact: true })
+        .fill('Example Artist')
+    await page.getByLabel('开演时间').fill('2026-12-12T19:30')
+    await page
+        .getByRole('button', { name: '活动门票(海报)', exact: true })
+        .click()
+    await chooseImage(page, '背景图片', image)
+    await page.getByRole('switch', { name: '显示条码' }).check()
+    await page.getByLabel('条码内容', { exact: true }).fill('POSTER-EVENT-TEST')
+    await expect(page.locator('.pass[data-layout="poster"]')).toBeVisible()
+    const field = page.locator('.pass-header-field')
+    const time = field.locator('.pass-header-time')
+    // With a start time the 日期 label is dropped and the date sits above the
+    // time, so the header keeps exactly two lines.
+    await expect(field.locator('.pass-label')).toHaveCount(0)
+    await expect(field.locator('.pass-value')).toHaveText('12月12日')
+    await expect(time).toHaveText('19:30')
+    const [dateTop, timeTop] = await field.evaluate((element) => [
+        element.querySelector('.pass-value')!.getBoundingClientRect().top,
+        element.querySelector('.pass-header-time')!.getBoundingClientRect().top,
+    ])
+    expect(timeTop).toBeGreaterThan(dateTop)
+    // The time uses the same colour as the identity label.
+    const labelColor = await page
+        .locator('.pass-identity-text')
+        .evaluate((element) => getComputedStyle(element).color)
+    await expect(time).toHaveCSS('color', labelColor)
+    // The classic fallback has no time and keeps the 日期 label.
+    await page.getByRole('switch', { name: '显示条码' }).uncheck()
+    await expect(page.locator('.pass[data-layout="classic"]')).toBeVisible()
+    await expect(page.locator('.pass-header-field .pass-label')).toHaveText(
+        '日期',
+    )
+    await expect(page.locator('.pass-header-time')).toHaveCount(0)
 })
 
 test('keeps the barcode across both styles and exports it only when switched on', async ({

@@ -1296,7 +1296,9 @@ body.has-dialog {
 .pass-generic-fields > div:first-child {
     max-width: 60%;
 }
-.pass-generic-fields > div:last-child {
+/* Only the trailing seat column hugs the right edge; a lone event field (no
+   region, row or seat) stays left-aligned with the rest of the band. */
+.pass-generic-fields > div:last-child:not(:first-child) {
     text-align: right;
 }
 .pass-generic-bottom {
@@ -1402,15 +1404,19 @@ body.has-dialog {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* The date keeps the header's right edge even without a logo or artist. */
 .pass-header-field {
     flex-shrink: 0;
+    margin-left: auto;
     text-align: right;
 }
+/* With a start time the header drops the 日期 label, so the second line takes
+   the label colour and keeps the header's two-line rhythm. */
 .pass-header-time {
     display: block;
+    color: var(--pass-label);
     font-size: calc(var(--pt) * 13);
     line-height: 1.3;
-    opacity: 0.92;
 }
 .pass-body {
     padding: calc(var(--pt) * 8) calc(var(--pt) * 14) 0;
