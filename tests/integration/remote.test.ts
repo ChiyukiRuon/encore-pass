@@ -6,6 +6,7 @@ import { POST } from '@/app/api/passes/route'
 import { ticket } from '../fixtures/ticket'
 import { buildResources } from '@/lib/wallet/pass-builder'
 import { remoteSign } from '@/lib/wallet/signers/remote'
+import { eventFieldKeys } from '@/lib/ticket/event-fields'
 
 function signedFixture(pass: Record<string, unknown>) {
     const json = Buffer.from(JSON.stringify(pass))
@@ -26,6 +27,76 @@ function signedFixture(pass: Record<string, unknown>) {
         { headers: { 'Content-Type': 'application/vnd.apple.pkpass' } },
     )
 }
+
+it('forwards enabled event details, semantic metadata and guide links to the signer', async () => {
+    const png = await sharp({
+        create: { width: 20, height: 20, channels: 3, background: '#abcdef' },
+    })
+        .png()
+        .toBuffer()
+    const resources = await buildResources(
+        {
+            ...ticket,
+            passStyle: 'posterEventTicket',
+            barcodeEnabled: true,
+            eventType: 'sports',
+            eventFields: eventFieldKeys.filter((key) => key !== 'attendeeName'),
+            eventInfo: {
+                homeTeamAbbreviation: 'HME',
+                awayTeamAbbreviation: 'AWY',
+                admissionLevel: 'VIP',
+                price: '120.50',
+                currency: 'CNY',
+                transitUrl: 'https://example.com/transit',
+                attendeeName: 'PRIVATE-HIDDEN',
+            },
+            customFields: [
+                {
+                    id: ticket.id,
+                    label: '集合地点',
+                    value: '北广场',
+                    enabled: true,
+                },
+            ],
+            appearance: {
+                ...ticket.appearance,
+                backgroundDataUrl: `data:image/png;base64,${png.toString('base64')}`,
+            },
+        },
+        {
+            passTypeIdentifier: 'pass.com.arshwaraich.vps',
+            teamIdentifier: 'TEST',
+            organizationName: 'Synthetic',
+        },
+    )
+    const pass = JSON.parse(resources['pass.json'].toString())
+    let payload: Record<string, unknown> = {}
+    vi.stubGlobal(
+        'fetch',
+        vi
+            .fn()
+            .mockImplementationOnce(async (_url, init) => {
+                payload = JSON.parse(init.body)
+                return Response.json({
+                    download_url:
+                        'https://walletmcppass.com/download/event-details',
+                })
+            })
+            .mockImplementationOnce(async () => signedFixture(pass)),
+    )
+    await remoteSign(resources)
+    expect(payload.semantics).toMatchObject({
+        eventType: 'PKEventTypeSports',
+        homeTeamAbbreviation: 'HME',
+        awayTeamAbbreviation: 'AWY',
+        totalPrice: { amount: '120.50', currencyCode: 'CNY' },
+    })
+    expect(payload.info_links).toEqual({
+        transitInformationURL: 'https://example.com/transit',
+    })
+    expect(JSON.stringify(payload)).toContain('北广场')
+    expect(JSON.stringify(payload)).not.toContain('PRIVATE-HIDDEN')
+})
 
 it.each(['eventTicket', 'posterEventTicket', 'posterGeneric'] as const)(
     'uses the documented style and image contract for %s in all background/barcode states',
@@ -59,6 +130,7 @@ it.each(['eventTicket', 'posterEventTicket', 'posterGeneric'] as const)(
                             ...ticket.appearance,
                             backgroundDataUrl: background ? data : undefined,
                             thumbnailDataUrl: data,
+                            logoDataUrl: data,
                             secondaryLogoDataUrl: data,
                         },
                     },
@@ -74,6 +146,23 @@ it.each(['eventTicket', 'posterEventTicket', 'posterGeneric'] as const)(
                     .fn()
                     .mockImplementationOnce(async (_url, init) => {
                         payload = JSON.parse(init.body)
+                        const outputs = {
+                            logo: 'logo',
+                            primary_logo: 'primaryLogo',
+                            secondary_logo: 'secondaryLogo',
+                            thumbnail: 'thumbnail',
+                            artwork: 'artwork',
+                            background: 'background',
+                        }
+                        for (const [parameter, output] of Object.entries(
+                            outputs,
+                        )) {
+                            const sent = payload[`${parameter}_png_b64`]
+                            if (sent)
+                                expect(
+                                    Buffer.from(sent as string, 'base64'),
+                                ).toEqual(resources[`${output}@3x.png`])
+                        }
                         expect(payload.style).toBe(
                             native ? 'generic' : 'eventTicket',
                         )
@@ -669,7 +758,7 @@ it('reports timeouts separately', async () => {
     )
 })
 
-it('reports upstream 413 as a size error without retrying', async () => {
+it('reports upstream 413 without retrying when no smaller images are available', async () => {
     const fetchMock = vi
         .fn()
         .mockResolvedValue(new Response('', { status: 413 }))
@@ -678,4 +767,93 @@ it('reports upstream 413 as a size error without retrying', async () => {
     expect(response.status).toBe(413)
     expect((await response.json()).error.code).toBe('REMOTE_PAYLOAD_TOO_LARGE')
     expect(fetchMock).toHaveBeenCalledTimes(1)
+})
+
+async function largeImageResources() {
+    const resources = await buildResources(
+        { ...ticket, barcodeEnabled: false },
+        {
+            passTypeIdentifier: 'pass.com.arshwaraich.vps',
+            teamIdentifier: 'TEST',
+            organizationName: 'Synthetic',
+        },
+    )
+    resources['background@3x.png'] = await sharp({
+        create: {
+            width: 1029,
+            height: 1509,
+            channels: 3,
+            background: '#abcdef',
+        },
+    })
+        .png({ compressionLevel: 0 })
+        .toBuffer()
+    return resources
+}
+
+it('sends large images unchanged and compresses only after HTTP 413', async () => {
+    const resources = await largeImageResources()
+    const pass = JSON.parse(resources['pass.json'].toString())
+    const bodies: string[] = []
+    const fetchMock = vi
+        .fn()
+        .mockImplementationOnce(async (_url, init) => {
+            bodies.push(init.body)
+            expect(Buffer.byteLength(init.body)).toBeGreaterThan(900 * 1024)
+            expect(JSON.parse(init.body).background_png_b64).toBe(
+                resources['background@3x.png'].toString('base64'),
+            )
+            return new Response('', { status: 413 })
+        })
+        .mockImplementationOnce(async (_url, init) => {
+            bodies.push(init.body)
+            return Response.json({
+                download_url: 'https://walletmcppass.com/download/compressed',
+            })
+        })
+        .mockImplementationOnce(() => signedFixture(pass))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(remoteSign(resources)).resolves.toBeInstanceOf(Buffer)
+    expect(bodies[1].length).toBeLessThan(bodies[0].length)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+})
+
+it.each([200, 400, 402, 429, 500, 503])(
+    'does not compress or resubmit after HTTP %s',
+    async (status) => {
+        const resources = await largeImageResources()
+        const pass = JSON.parse(resources['pass.json'].toString())
+        const fetchMock = vi
+            .fn()
+            .mockImplementationOnce(async (_url, init) => {
+                expect(JSON.parse(init.body).background_png_b64).toBe(
+                    resources['background@3x.png'].toString('base64'),
+                )
+                return status === 200
+                    ? Response.json({
+                          download_url:
+                              'https://walletmcppass.com/download/original',
+                      })
+                    : new Response('', { status })
+            })
+            .mockImplementationOnce(() => signedFixture(pass))
+        vi.stubGlobal('fetch', fetchMock)
+        if (status === 200)
+            await expect(remoteSign(resources)).resolves.toBeInstanceOf(Buffer)
+        else await expect(remoteSign(resources)).rejects.toBeDefined()
+        expect(fetchMock).toHaveBeenCalledTimes(status === 200 ? 2 : 1)
+    },
+)
+
+it('stops after the compression alternatives are exhausted', async () => {
+    const resources = await largeImageResources()
+    const fetchMock = vi
+        .fn()
+        .mockImplementation(() => new Response('', { status: 413 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(remoteSign(resources)).rejects.toMatchObject({
+        code: 'REMOTE_PAYLOAD_TOO_LARGE',
+    })
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1)
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(5)
 })

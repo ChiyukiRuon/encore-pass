@@ -11,6 +11,7 @@ import {
 } from '@/lib/ticket/validation'
 import { imageTone } from '@/lib/import/files'
 import { genericPosterFields, passFields } from '@/lib/wallet/pass-fields'
+import { activeEventTicket, performerNames } from '@/lib/ticket/event-fields'
 
 function Field({ label, value }: { label?: string; value: string }) {
     return (
@@ -88,6 +89,7 @@ function BarcodePreview({ barcode }: { barcode: TicketBarcode }) {
 // the background) and the poster layout (bare header and seat footer). The
 // barcode card sits at the classic bottom or above the poster footer.
 export function TicketPreview({ draft }: { draft: TicketDraft }) {
+    draft = activeEventTicket(draft)
     const [collapsed, setCollapsed] = useState(false)
     const [posterTone, setPosterTone] = useState<{
         url: string
@@ -101,7 +103,8 @@ export function TicketPreview({ draft }: { draft: TicketDraft }) {
     const fields = passFields(draft)
     const { appearance } = draft
     const thumbnail = appearance.thumbnailDataUrl || appearance.heroDataUrl
-    const logoText = draft.performer
+    const logoText =
+        performerNames(draft).join(' / ') || draft.eventInfo?.organizer
     const primary = fields.primaryFields[0]
     const maskOpacity = usesBackgroundMask(draft)
         ? appearance.backgroundMaskOpacity
@@ -113,11 +116,10 @@ export function TicketPreview({ draft }: { draft: TicketDraft }) {
             ? fields.secondaryFields.find((field) => field.key === 'starts')
                   ?.value
             : undefined
-    const seats = [
-        { label: '区', value: draft.section },
-        { label: '排', value: draft.row },
-        { label: '座位', value: draft.seat },
-    ].filter((seat) => seat.value)
+    const seats = fields.auxiliaryFields.map((field) => ({
+        ...field,
+        label: field.key === 'section' ? '区' : field.label,
+    }))
 
     useEffect(() => {
         const url = appearance.backgroundDataUrl

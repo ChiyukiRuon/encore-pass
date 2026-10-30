@@ -117,6 +117,11 @@ test('resets a free logo selection and clears its stored crop', async ({
 
     const draft = await exportDraft(page)
     expect(draft.appearance.logoDataUrl).toMatch(/^data:image\//)
+    // A full-image selection must retain the original, not a 200x150
+    // intermediate that would destroy detail on the next crop.
+    expect(draft.appearance.logoDataUrl).toBe(
+        `data:image/png;base64,${(await readFile(image)).toString('base64')}`,
+    )
     expect(draft.appearance.imageCrops).toBeUndefined()
     expect(draft.appearance.imageSources).toBeUndefined()
 })

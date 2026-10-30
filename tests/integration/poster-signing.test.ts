@@ -99,6 +99,47 @@ it('signs 通用凭证 with the shared poster layout and no barcode', async () =
         expect(files['background@2x.png']).toBeDefined()
         expect(files['logo@2x.png']).toBeDefined()
         expect(files.signature).toBeDefined()
+        const eventFiles = unzipSync(
+            new Uint8Array(
+                await buildPass({
+                    ...ticket,
+                    passStyle: 'posterEventTicket',
+                    barcodeEnabled: true,
+                    eventType: 'sports',
+                    eventFields: [
+                        'homeTeamAbbreviation',
+                        'awayTeamAbbreviation',
+                        'price',
+                        'transitUrl',
+                        'seatLevel',
+                    ],
+                    eventInfo: {
+                        homeTeamAbbreviation: 'HME',
+                        awayTeamAbbreviation: 'AWY',
+                        price: '100.00',
+                        currency: 'CNY',
+                        transitUrl: 'https://example.com/transit',
+                        seatLevel: '2',
+                    },
+                    appearance: {
+                        ...ticket.appearance,
+                        backgroundDataUrl: `data:image/png;base64,${background.toString('base64')}`,
+                    },
+                }),
+            ),
+        )
+        const eventPass = JSON.parse(
+            Buffer.from(eventFiles['pass.json']).toString(),
+        )
+        expect(eventPass.semantics).toMatchObject({
+            eventType: 'PKEventTypeSports',
+            totalPrice: { amount: '100.00', currencyCode: 'CNY' },
+            seats: [{ seatLevel: '2' }],
+        })
+        expect(eventPass.transitInformationURL).toBe(
+            'https://example.com/transit',
+        )
+        expect(eventFiles.signature).toBeDefined()
     } finally {
         await rm(folder, { recursive: true, force: true })
     }

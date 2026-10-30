@@ -47,7 +47,7 @@ export const passImages = {
 export const imageSourceSizes = {
     logo: { width: 160, height: 50 },
     thumbnail: { width: 90, height: 90 },
-    background: { width: 358, height: 503 },
+    background: { width: 358, height: 505 },
     secondaryLogo: { width: 135, height: 12 },
 } as const
 

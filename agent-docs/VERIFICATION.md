@@ -14,13 +14,15 @@ Run `npx playwright install chromium` once before browser tests. Every suite use
 
 ## Automated coverage
 
+Activity preset coverage: `tests/unit/event-fields.test.ts` checks legacy compatibility, retained versus active values, validation, custom fields, admission fallback and semantic mapping. The local poster signing test uses ephemeral certificates to check expanded sports metadata and links; the remote contract suite checks `info_links`, semantic prices/teams and omitted disabled values. `tests/e2e/event-fields.spec.ts` exercises presets, custom selection, persistence, JSON round trips, signing-request omission, details preview and desktop/mobile light/dark screenshots. New metadata has not been verified on a physical iPhone, against the live signing provider or in Docker during this change.
+
 | Suite                                      | Coverage                                                                                                                                                                                                                        |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tests/unit/ticket.test.ts`                | Draft validation, barcode confirmation, styled defaults and legacy migration, mask gating, crop source bounds, lossy barcode encodings, timezone/DST resolution and pass mapping for all three styles.                          |
 | `tests/unit/crop.test.ts`                  | Crop frames (1:1, 343:503, 358:448), default centred selection, move/resize bounds, locked aspect and stored rectangle validation.                                                                                              |
 | `tests/unit/timezone.test.ts`              | Full IANA option list, UTC fallback, validity checks and device-zone defaults.                                                                                                                                                  |
 | `tests/unit/barcode.test.ts`               | Round-trips QR, PDF417, AZTEC and CODE128 through an independent decoder.                                                                                                                                                       |
-| `tests/unit/remote-payload.test.ts`        | 900 KiB serialized payload budget, palette quantization and resizing, preservation of alpha, aspect, text and barcode data, and byte-for-byte pass-through for small requests.                                                  |
+| `tests/unit/remote-payload.test.ts`        | lazy original-first serialization without a local size cap, lossless optimization, exact pixel/alpha and dimension preservation, automatic artwork compression with a @2x floor and protected logos/thumbnails, preservation of text and barcode data, and byte-for-byte first requests of any accepted size.                                                  |
 | `tests/integration/api.test.ts`            | Health response, origin and Host checks, preview refusal, client identity injection, oversized and malformed JSON, unsupported barcodes, unavailable local keys and unsigned resource builds.                                   |
 | `tests/integration/auth.test.ts`           | Production fail-closed without auth and Basic-auth acceptance.                                                                                                                                                                  |
 | `tests/integration/signing.test.ts`        | Local classic event-ticket ZIP resources, barcode fields, manifest hashes and detached PKCS7 signature with synthetic certificates.                                                                                             |
@@ -48,3 +50,11 @@ The project owner confirmed that the following checks are complete:
 - Visual equivalence of the provider-rebuilt image resources on a real device.
 
 Different iOS versions may still fall back, truncate or reposition content. Apple trust-chain validation remains out of scope: tests verify manifest hashes and detached-signature math only.
+
+## Image clarity regression
+
+Remote image mapping now sends @3x resources for all artwork, logos and thumbnails. Payload tests compare decoded pixels including alpha for lossless optimization, exercise automatic artwork compression with a @2x floor, retain full dimensions when palette compression suffices, and protect logos/thumbnails during lossy artwork compression. Crop browser tests verify original-byte retention after a full-image selection. This change has not been verified on a physical iPhone, with live remote signing, or in Docker. The provider currently stores custom images under unscaled filenames; its Retina asset packaging remains outside this repository. Previously downscaled drafts require re-uploading originals and installing a newly generated pass.
+
+Typecheck, lint, production build and all eight desktop/mobile crop tests passed. The full unit/integration run passed all 119 tests. Image-specific payload and remote @3x mapping tests pass.
+
+HTTP 413 regression coverage verifies original images above the former 900 KiB threshold are sent unchanged, compression begins only after upstream rejection, successful retry still validates the signed archive, other HTTP statuses do not resubmit, and exhausted alternatives return a size error. All attempts use a shared deadline. These changes have no new live-provider, iPhone or Docker verification.

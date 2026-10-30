@@ -48,6 +48,8 @@ RootLayout (server)
 
 ## State ownership
 
+- **Activity metadata** remains in the same draft. `EventSection` also receives `setDraft` for atomic preset/selection changes and owns only whether the field picker is expanded. It reuses grouped rows, native selects, checkboxes and switches. Optional inputs are grouped by purpose; seats retain the three-column row. The preset is independent of the actual event category and Wallet style. `TicketPreview` derives an active projection and renders back fields in a native details disclosure; it never clears retained editor values.
+
 - **Business state lives in `TicketEditor`.** The draft is one `TicketDraft` object; `update(key, value)` applies a shallow immutable update, and `setDraft` is passed down for nested appearance, crop and barcode changes. Do not create parallel copies of pass fields in child components.
 - **Persistence stays in `TicketEditor`.** The 400 ms debounce, `loadDraft`/`saveDraft`/`deleteDraft`, pending-save draining and storage errors are all handled there.
 - **Ephemeral UI state stays local.** `barcodeFormat` holds the chosen format before a barcode object exists; once content is entered, the draft's `barcode` owns the format. `cropRequest` describes an open dialog; `collapsed` and `posterTone` are preview-only.
@@ -59,10 +61,10 @@ RootLayout (server)
 - **Native `<dialog>` with `showModal()`.** The save guide, confirm sheet and crop picker use the platform dialog, `::backdrop`, a `closing` state and a timer fallback. Backdrop clicks are detected by comparing the click point to the dialog box because `::backdrop` is not a DOM node.
 - **Focus and scroll are explicit.** Opening stores the trigger, closing returns focus, and `body.has-dialog` locks scrolling. The root reserves a scrollbar gutter to avoid layout shift.
 - **Reduced motion is honoured.** Closing timers and CSS animations have reduced-motion variants; the pass keeps a short fade instead of the height transition.
-- **Section composition.** The editor uses `Section` for the numbered groups. Form controls use `.row`, `.field`, `.field-label`, `.toggle-row` and `.switch` so labels, borders and spacing stay consistent.
+- **Section composition.** The editor uses `Section` for the numbered groups. Form controls use `.row`, `.field`, `.field-label`, `.toggle-row` and `.switch` so labels, borders and spacing stay consistent. A field label is also its row or split cell (`row field`, `event-input field`) so the focus ring wraps the padded box; do not wrap a field in another padded container.
 - **Inline SVG, no icon package.** The brand mark, GitHub icon, import/trash icons and image-slot illustrations are inline SVG. Keep `app/icon.svg`, `BrandMark` and the pass-icon SVG in sync.
 - **Barcode rendering is browser-local.** `TicketPreview` dynamically loads `bwip-js` to draw the canvas; barcode content never goes to the server for preview.
-- **Image flow.** File selection -> `appearanceImage` downscale -> `ImageCropDialog` -> `cropImage` -> draft data URLs plus optional `imageSources`/`imageCrops`. Signing strips the sources and crops before `POST /api/passes`.
+- **Image flow.** File selection -> `appearanceImage` original-byte retention -> `ImageCropDialog` -> `cropImage` -> draft data URLs plus optional `imageSources`/`imageCrops`. Signing strips the sources and crops before `POST /api/passes`.
 - **No portal or animation library.** Dialog animation and focus management are hand-written in the component and `globals.css`.
 
 ## Styling and testing conventions

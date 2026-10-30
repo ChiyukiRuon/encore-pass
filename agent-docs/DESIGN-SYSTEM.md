@@ -70,5 +70,6 @@ The preview stage is a separate gradient, `--stage`: a sky with white light pool
 
 - `app/globals.css` imports Tailwind v4, but the UI is authored with semantic classes (`.group`, `.row`, `.field`, `.pass-*`) rather than utility-class strings. Add new styles in the relevant section of that file instead of introducing CSS modules or a second stylesheet.
 - Reuse the existing primitives: `Section` for grouped sections, `.row`, `.field`, `.button`, `.icon-button`, `.switch`, `.segmented`, `.notice`.
+- Selects stay native. On browsers that support customizable selects (`appearance: base-select`), the popup is themed with `--surface-raised`, `--fill` and `--tint-text`; other browsers keep the platform popup. Do not replace selects with scripted listboxes.
 - Pass-preview geometry is expressed in `--pt` units derived from the 343 px card width via container queries. Do not hard-code pixel positions that break when the card scales.
 - Test both 1280 px desktop and 375 px mobile; the editor grid collapses and the image slots become rows below 640 px.

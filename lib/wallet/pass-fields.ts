@@ -1,4 +1,11 @@
 import type { TicketDraft } from '@/lib/ticket/schema'
+import {
+    activeEventTicket,
+    eventFieldDefinitions,
+    eventTypes,
+    eventValue,
+    selectedEventFields,
+} from '@/lib/ticket/event-fields'
 
 function field(key: string, label: string, value?: string) {
     return value ? [{ key, label, value }] : []
@@ -39,12 +46,34 @@ function clock(ticket: TicketDraft, value: string) {
 }
 
 function backFields(ticket: TicketDraft) {
+    const additional = selectedEventFields(ticket).flatMap((key) => {
+        if (['performer', 'doorsOpenAt', 'venueRoom'].includes(key)) return []
+        const [label, , kind] = eventFieldDefinitions[key]
+        const value = eventValue(ticket, key)
+        return field(
+            `detail-${key}`,
+            label,
+            !value
+                ? undefined
+                : kind === 'date'
+                  ? fullDate(ticket, value)
+                  : kind === 'price'
+                    ? `${value} ${ticket.eventInfo?.currency ?? ''}`.trim()
+                    : value,
+        )
+    })
     return [
         ...field('event-detail', '活动', ticket.eventName),
-        ...field('performer', '艺人 / 主办方', ticket.performer),
+        ...field('performer', '艺人 / 演出者', ticket.performer),
+        ...field(
+            'event-type',
+            '活动类别',
+            ticket.eventType ? eventTypes[ticket.eventType] : undefined,
+        ),
+        ...field('venue-detail', '场馆', ticket.venueName),
         ...field(
             'starts-detail',
-            '开演时间',
+            '开始时间',
             ticket.startsAt ? fullDate(ticket, ticket.startsAt) : undefined,
         ),
         ...field('address', '地址', ticket.venueAddress),
@@ -58,6 +87,14 @@ function backFields(ticket: TicketDraft) {
                 : undefined,
         ),
         ...field('timezone', '场馆时区', ticket.timezone),
+        ...additional,
+        ...(ticket.customFields ?? [])
+            .filter((item) => item.enabled && item.label && item.value)
+            .map((item) => ({
+                key: `custom-${item.id}`,
+                label: item.label,
+                value: item.value,
+            })),
         {
             key: 'notice',
             label: '使用说明',
@@ -69,6 +106,7 @@ function backFields(ticket: TicketDraft) {
 // Classic event ticket: header date, primary event, secondary venue and start,
 // auxiliary seat row. Wallet blurs the background image behind these fields.
 export function passFields(ticket: TicketDraft) {
+    ticket = activeEventTicket(ticket)
     return {
         headerFields: field(
             'date',
@@ -80,7 +118,7 @@ export function passFields(ticket: TicketDraft) {
             ...field('venue', '场馆', ticket.venueName),
             ...field(
                 'starts',
-                '开演',
+                '开始',
                 ticket.startsAt ? clock(ticket, ticket.startsAt) : undefined,
             ),
         ],
@@ -88,6 +126,9 @@ export function passFields(ticket: TicketDraft) {
             ...field('section', '区域', ticket.section),
             ...field('row', '排', ticket.row),
             ...field('seat', '座位', ticket.seat),
+            ...(!ticket.section && !ticket.row && !ticket.seat
+                ? field('admission', '票种', ticket.eventInfo?.admissionLevel)
+                : []),
         ],
         backFields: backFields(ticket),
     }

@@ -10,7 +10,7 @@
 | `components/editor/`                    | Editor sections, save/clear/import sheets and the image crop dialog.                                                                                                                                                                 |
 | `components/preview/ticket-preview.tsx` | 343x474 pt Wallet preview for the classic, poster event and poster generic layouts.                                                                                                                                                  |
 | `lib/ticket/`                           | Shared Zod schema and migration (`schema.ts`), timezone conversion (`timezone.ts`), layout/barcode gating (`validation.ts`), image specifications (`appearance.ts`), crop geometry (`crop.ts`) and IndexedDB storage (`storage.ts`). |
-| `lib/import/files.ts`                   | Browser-only image decoding, @3x downscaling and poster band tone sampling.                                                                                                                                                          |
+| `lib/import/files.ts`                   | Browser-only image decoding, original-image retention and crop-first @3x sizing and poster band tone sampling.                                                                                                                                                          |
 | `lib/barcode/decode.ts`                 | Retained ZXing decoder and tests. It is not reachable from the editor and is kept for the specification's M3.                                                                                                                        |
 | `lib/wallet/`                           | Draft-to-pass mapping (`pass-mapper.ts`), field construction (`pass-fields.ts`), resource rendering (`pass-builder.ts`), remote payload compression (`remote-payload.ts`) and signers (`signers/local.ts`, `signers/remote.ts`).     |
 | `lib/server/`                           | `errors.ts` (error contract) and `limits.ts` (single-process request and generation budgets).                                                                                                                                        |
@@ -18,6 +18,8 @@
 | `agent-docs/`                           | English documentation: architecture, implementation, operations, design system, components and verification.                                                                                                                         |
 
 ## Data flow
+
+The activity catalogue and preset logic live in `lib/ticket/event-fields.ts`. `eventFields` selects optional inputs independently of pass style; `eventInfo` and stable-ID `customFields` extend the legacy draft. Form rendering, preview and signing reuse this catalogue. Inactive values survive local persistence and JSON round trips, but are stripped before signing requests and again by server mapping. See [Activity presets](IMPLEMENTATION.md#activity-presets-and-optional-metadata).
 
 1. The editor holds a `TicketDraft`. Incomplete drafts are valid; `ticketDraftSchema` validates complete drafts and `exportTicketSchema` additionally requires barcode confirmation when the switch is on.
 2. A 400 ms debounce writes the draft to IndexedDB. JSON import is bounded to 32 MB, migrated and validated before replacing the editor; signing consent is never persisted or imported.
@@ -40,7 +42,7 @@
 | `artwork`                     | 358x448                        | cover             | Poster event ticket   |
 | `secondaryLogo`               | 135x12                         | inside, uncropped | Poster event ticket   |
 
-`passImageOutputs` maps one upload to these outputs; `imageSourceSizes` gives the browser the largest source size (logo 160x50, thumbnail 90x90, background 358x503, secondaryLogo 135x12). Images export at @2x/@3x; the required `icon.png` exports at 1x/2x/3x. The crop sheet locks the thumbnail to 1:1 and the background to 343:503 (classic), 358:448 (poster event) or 345:505 (generic poster); logos keep a free selection. `backgroundMaskOpacity` is composited into `background.png` and `artwork.png` only for classic layouts.
+`passImageOutputs` maps one upload to these outputs; `imageSourceSizes` gives the browser the largest source size (logo 160x50, thumbnail 90x90, background 358x505, secondaryLogo 135x12). Images export at @2x/@3x; the required `icon.png` exports at 1x/2x/3x. The crop sheet locks the thumbnail to 1:1 and the background to 343:503 (classic), 358:448 (poster event) or 345:505 (generic poster); logos keep a free selection. `backgroundMaskOpacity` is composited into `background.png` and `artwork.png` only for classic layouts.
 
 Legacy `heroDataUrl` drafts migrate to the thumbnail. Strips are never produced.
 

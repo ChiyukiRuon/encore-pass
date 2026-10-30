@@ -12,6 +12,7 @@ import {
 import type { TicketDraft } from '@/lib/ticket/schema'
 import { loadDraft, saveDraft, deleteDraft } from '@/lib/ticket/storage'
 import { barcodeProblem } from '@/lib/ticket/validation'
+import { activeEventTicket } from '@/lib/ticket/event-fields'
 import { migrateAppearance } from '@/lib/ticket/appearance'
 import { TicketPreview } from '@/components/preview/ticket-preview'
 import { ClearDraft } from './clear-draft'
@@ -183,7 +184,11 @@ export function TicketEditor() {
                         ? { 'X-Encore-Remote-Sign': 'walletmcppass' }
                         : {}),
                 },
-                body: JSON.stringify({ ...parsed.data, appearance, barcode }),
+                body: JSON.stringify({
+                    ...activeEventTicket(parsed.data),
+                    appearance,
+                    barcode,
+                }),
                 signal: AbortSignal.timeout(30_000),
             })
             if (!response.ok) {
@@ -298,6 +303,7 @@ export function TicketEditor() {
                         <EventSection
                             draft={draft}
                             update={update}
+                            setDraft={setDraft}
                             onMessage={setMessage}
                             action={
                                 <>
@@ -387,7 +393,8 @@ export function TicketEditor() {
                                 draft.barcode && (
                                     <label className="row toggle-row">
                                         <span>
-                                            我了解并明白 EncorePass 生成的票卡仅用于展示和收藏，不是也不能作为活动的入场凭证
+                                            我了解并明白 EncorePass
+                                            生成的票卡仅用于展示和收藏，不是也不能作为活动的入场凭证
                                         </span>
                                         <span className="switch">
                                             <input
@@ -457,7 +464,8 @@ export function TicketEditor() {
                                 )}
                                 {walletUrl && (
                                     <p className="notice">
-                                        如果没有自动下载，请手动点击：<a
+                                        如果没有自动下载，请手动点击：
+                                        <a
                                             href={walletUrl}
                                             target="_blank"
                                             rel="noreferrer"

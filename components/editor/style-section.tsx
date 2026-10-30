@@ -199,7 +199,7 @@ export function StyleSection({
 
     async function chooseImage(slot: ImageSlot, file: File) {
         try {
-            const source = await appearanceImage(file, slot)
+            const source = await appearanceImage(file)
             setCropRequest({ slot, title: slotTitle(slot), source })
         } catch (error) {
             onMessage(error instanceof Error ? error.message : '图片处理失败')

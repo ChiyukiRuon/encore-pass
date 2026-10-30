@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { unzipSync } from 'fflate'
 import { AppError } from '@/lib/server/errors'
-import { serializeRemotePayload } from '@/lib/wallet/remote-payload'
+import { remotePayloadBodies } from '@/lib/wallet/remote-payload'
+import { eventInformationLinks } from '@/lib/ticket/event-fields'
 
 const origin = 'https://walletmcppass.com'
 const maxBytes = 10 * 1024 * 1024
@@ -98,6 +99,12 @@ export async function remoteSign(
             payload.footer_fields = pass.posterGeneric.footerFields
     }
     if (posterEvent) {
+        const links = Object.fromEntries(
+            Object.values(eventInformationLinks).flatMap((key) =>
+                pass[key] ? [[key, pass[key]]] : [],
+            ),
+        )
+        if (Object.keys(links).length) payload.info_links = links
         // The provider builds the shared poster layout from semantic tags;
         // eventTicket fields stay as the classic fallback.
         payload.semantic_layout = true
@@ -112,38 +119,44 @@ export async function remoteSign(
     }
     const images: [string, string][] = posterGeneric
         ? [
-              ['primaryLogo@2x.png', 'primary_logo_png_b64'],
-              ['logo@2x.png', 'logo_png_b64'],
+              ['primaryLogo@3x.png', 'primary_logo_png_b64'],
+              ['logo@3x.png', 'logo_png_b64'],
               ['background@3x.png', 'background_png_b64'],
           ]
         : posterEvent
           ? [
-                ['primaryLogo@2x.png', 'primary_logo_png_b64'],
-                ['logo@2x.png', 'logo_png_b64'],
-                ['secondaryLogo@2x.png', 'secondary_logo_png_b64'],
-                ['artwork@2x.png', 'artwork_png_b64'],
-                ['background@2x.png', 'background_png_b64'],
+                ['primaryLogo@3x.png', 'primary_logo_png_b64'],
+                ['logo@3x.png', 'logo_png_b64'],
+                ['secondaryLogo@3x.png', 'secondary_logo_png_b64'],
+                ['artwork@3x.png', 'artwork_png_b64'],
+                ['background@3x.png', 'background_png_b64'],
             ]
           : [
-                ['logo@2x.png', 'logo_png_b64'],
-                ['thumbnail@2x.png', 'thumbnail_png_b64'],
-                ['background@2x.png', 'background_png_b64'],
+                ['logo@3x.png', 'logo_png_b64'],
+                ['thumbnail@3x.png', 'thumbnail_png_b64'],
+                ['background@3x.png', 'background_png_b64'],
             ]
     for (const [file, parameter] of images) {
         const image = resources[file]
         if (image) payload[parameter] = image.toString('base64')
     }
-    const body = await serializeRemotePayload(payload)
     const signal = AbortSignal.timeout(15_000)
     let stage: 'request' | 'response' | 'download' | 'validation' = 'request'
     try {
-        const response = await fetch(`${origin}/api/passes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-            redirect: 'error',
-            signal,
-        })
+        let response: Response | undefined
+        for await (const body of remotePayloadBodies(payload)) {
+            signal.throwIfAborted()
+            response = await fetch(`${origin}/api/passes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body,
+                redirect: 'error',
+                signal,
+            })
+            if (response.status !== 413) break
+            await response.body?.cancel()
+        }
+        if (!response) throw new Error('Missing signing response')
         if (response.status === 402 || response.status === 429)
             throw new AppError(
                 503,

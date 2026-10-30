@@ -297,6 +297,7 @@ h1 {
 
 /* Fields: borderless inputs inside rows; the row shows focus. */
 .field {
+    display: block;
     cursor: text;
 }
 .field:focus-within {
@@ -363,6 +364,75 @@ h1 {
     border-bottom: 2px solid var(--tertiary);
     transform: rotate(45deg);
     pointer-events: none;
+}
+/* Customizable selects keep the popup in the page palette; browsers without
+   base-select keep their native popup and the CSS chevron above. */
+@supports (appearance: base-select) {
+    .field select,
+    .field select::picker(select) {
+        appearance: base-select;
+    }
+    .field select::picker-icon {
+        display: none;
+    }
+    .field select::picker(select) {
+        margin-top: 6px;
+        max-height: min(380px, 60vh);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: var(--tertiary) transparent;
+        padding: 6px;
+        border: 1px solid var(--separator);
+        border-radius: 14px;
+        background: var(--surface-raised);
+        box-shadow:
+            0 18px 48px rgb(0 0 0 / 0.18),
+            0 2px 8px rgb(0 0 0 / 0.1);
+    }
+    .field select option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 9px 12px;
+        border-radius: 9px;
+        color: var(--label);
+        font-size: 17px;
+        line-height: 1.35;
+        cursor: pointer;
+    }
+    .field select option:hover {
+        background: var(--fill);
+        color: var(--label);
+    }
+    .field select option:focus-visible {
+        background: var(--fill);
+        color: var(--label);
+    }
+    .field select option:checked {
+        background: var(--fill);
+        color: var(--tint-text);
+        font-weight: 600;
+    }
+    .field select option::checkmark {
+        order: 1;
+        margin-left: auto;
+        color: var(--tint-text);
+        content: '✓';
+    }
+    .field select optgroup {
+        padding: 8px 12px 4px;
+        color: var(--secondary);
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .field select optgroup option {
+        padding: 9px 12px 9px 20px;
+        color: var(--label);
+        font-size: 17px;
+        font-weight: 400;
+    }
 }
 .field small {
     display: block;
@@ -1176,6 +1246,107 @@ body.has-dialog {
     .crop-footer-actions {
         margin-left: auto;
     }
+}
+
+/* Activity presets share the editor's grouped rows and quiet hierarchy. */
+.event-group-title {
+    margin: 0;
+    padding-top: 24px;
+    color: var(--secondary);
+    background: var(--fill);
+    font-size: 13px;
+    font-weight: 600;
+}
+.event-group + .event-group {
+    border-top: 1px solid var(--separator);
+}
+.event-help {
+    margin: 8px 0 0;
+    color: var(--secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+.split > .event-input {
+    min-width: 0;
+    padding: 12px 16px;
+}
+.split > .event-input + .event-input {
+    border-left: 1px solid var(--separator);
+}
+@media (max-width: 640px) {
+    .split:not(.three) > .event-input + .event-input {
+        border-left: 0;
+        border-top: 1px solid var(--separator);
+    }
+}
+.event-field-picker fieldset {
+    min-width: 0;
+    margin: 16px 0 0;
+    padding: 0;
+    border: 0;
+}
+.event-field-picker legend {
+    color: var(--secondary);
+    font-size: 13px;
+    font-weight: 600;
+}
+.event-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 12px;
+}
+.event-options label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+.event-options input {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    accent-color: var(--tint);
+}
+.field textarea.event-textarea {
+    min-height: 52px;
+    font-family: inherit;
+    font-size: 17px;
+}
+/* Each custom text item is a group of regular rows. */
+.custom-event-field {
+    padding: 0;
+}
+.ticket-details {
+    margin-top: 16px;
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    overflow: hidden;
+}
+.ticket-details summary {
+    padding: 16px;
+    min-height: 44px;
+    cursor: pointer;
+    color: var(--tint-text);
+}
+.ticket-details dl {
+    max-height: 360px;
+    overflow: auto;
+    margin: 0;
+    padding: 0 16px 16px;
+}
+.ticket-details dl > div + div {
+    margin-top: 16px;
+}
+.ticket-details dt {
+    color: var(--secondary);
+    font-size: 13px;
+}
+.ticket-details dd {
+    margin: 4px 0 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 /* Wallet preview stage */

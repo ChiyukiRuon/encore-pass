@@ -2,6 +2,15 @@ import { z } from 'zod'
 import { Temporal } from '@js-temporal/polyfill'
 import { imageCropSchema } from './crop'
 import { deviceTimezone, isValidTimezone } from './timezone'
+import {
+    activeEventTicket,
+    eventFieldDefinitions,
+    eventFieldKeys,
+    eventTypes,
+    eventValue,
+    selectEventPreset,
+    selectedEventFields,
+} from './event-fields'
 
 const text = z.string().trim().max(160)
 const color = z.string().regex(/^#[0-9a-f]{6}$/i, '请输入 #RRGGBB 颜色')
@@ -58,7 +67,47 @@ export const ticketDraftSchema = z
         schemaVersion: z.literal(1),
         id: z.uuid(),
         eventName: text.min(1, '请填写活动名称'),
-        performer: text.optional(),
+        performer: z.string().trim().max(1600).optional(),
+        eventPreset: z
+            .enum(['performance', 'sports', 'gathering', 'custom'])
+            .optional(),
+        eventType: z
+            .enum(
+                Object.keys(eventTypes) as [
+                    keyof typeof eventTypes,
+                    ...(keyof typeof eventTypes)[],
+                ],
+            )
+            .optional(),
+        eventFields: z
+            .array(z.enum(eventFieldKeys))
+            .max(eventFieldKeys.length)
+            .refine((keys) => new Set(keys).size === keys.length)
+            .optional(),
+        eventInfo: z
+            .partialRecord(
+                z.enum([...eventFieldKeys, 'currency']),
+                z.string().trim().max(1600),
+            )
+            .optional(),
+        customFields: z
+            .array(
+                z
+                    .object({
+                        id: z.uuid(),
+                        label: z.string().trim().max(80),
+                        value: z.string().trim().max(1600),
+                        enabled: z.boolean(),
+                    })
+                    .strict(),
+            )
+            .max(10)
+            .refine(
+                (fields) =>
+                    new Set(fields.map((field) => field.id)).size ===
+                    fields.length,
+            )
+            .optional(),
         venueName: text.optional(),
         venueRegionName: text.optional(),
         venueRoom: text.optional(),
@@ -96,16 +145,85 @@ export const ticketDraftSchema = z
     })
     .strict()
 
-export const exportTicketSchema = ticketDraftSchema.refine(
-    (ticket) =>
-        !ticket.barcodeEnabled ||
-        !ticket.barcode ||
-        ticket.barcode.userConfirmed,
-    {
-        path: ['barcode', 'userConfirmed'],
-        message: '请核对并确认条码内容',
-    },
-)
+export const exportTicketSchema = ticketDraftSchema
+    .refine(
+        (ticket) =>
+            !ticket.barcodeEnabled ||
+            !ticket.barcode ||
+            ticket.barcode.userConfirmed,
+        {
+            path: ['barcode', 'userConfirmed'],
+            message: '请核对并确认条码内容',
+        },
+    )
+    .superRefine((draft, context) => {
+        const ticket = activeEventTicket(draft)
+        const issue = (message: string) =>
+            context.addIssue({ code: 'custom', message })
+        for (const key of selectedEventFields(ticket)) {
+            const value = eventValue(ticket, key)
+            if (!value) continue
+            const [label, , kind] = eventFieldDefinitions[key]
+            if (kind === 'url') {
+                try {
+                    const url = new URL(value)
+                    if (
+                        url.protocol !== 'https:' ||
+                        url.username ||
+                        url.password
+                    )
+                        throw new Error()
+                } catch {
+                    issue(`${label}请填写有效的 HTTPS 链接`)
+                }
+            } else if (
+                kind === 'email' &&
+                !z.email().safeParse(value).success
+            ) {
+                issue('请填写有效的联系邮箱')
+            } else if (kind === 'date' && !date.safeParse(value).success) {
+                issue(`${label}无效`)
+            } else if (kind === 'price') {
+                if (!/^\d{1,9}(\.\d{1,2})?$/.test(value))
+                    issue('票价应为非负金额，最多两位小数')
+                if (!/^[A-Z]{3}$/.test(ticket.eventInfo?.currency ?? ''))
+                    issue('请填写三位大写币种代码，例如 CNY')
+            } else if (kind === 'performers') {
+                const names = value.split(/\r?\n/).filter((name) => name.trim())
+                if (
+                    names.length > 10 ||
+                    names.some((name) => name.length > 160)
+                )
+                    issue('最多填写 10 位艺人，每位不超过 160 字')
+            } else if (kind !== 'multiline' && value.length > 160) {
+                issue(`${label}不能超过 160 字`)
+            }
+        }
+        if (
+            ticket.startsAt &&
+            ticket.eventInfo?.endsAt &&
+            Date.parse(ticket.eventInfo.endsAt) < Date.parse(ticket.startsAt)
+        )
+            issue('结束时间不能早于开始时间')
+        if (
+            ticket.eventType === 'sports' &&
+            ticket.passStyle === 'posterEventTicket' &&
+            ticket.appearance.backgroundDataUrl &&
+            ticket.barcodeEnabled &&
+            ticket.barcode &&
+            (!ticket.eventInfo?.homeTeamAbbreviation ||
+                !ticket.eventInfo?.awayTeamAbbreviation)
+        )
+            issue('体育海报票卡需要主队和客队简称，请在调整填写项中启用并填写')
+        if (
+            draft.customFields?.some(
+                (field) =>
+                    field.enabled &&
+                    Boolean(field.label) !== Boolean(field.value),
+            )
+        )
+            issue('请补全自定义文字项的名称和内容')
+    })
 
 export const editableDraftSchema = ticketDraftSchema.extend({ eventName: text })
 
@@ -152,19 +270,22 @@ function randomId(): string {
 }
 
 export function newDraft(): TicketDraft {
-    return {
-        schemaVersion: 1,
-        id: randomId(),
-        eventName: '',
-        timezone: deviceTimezone(),
-        passStyle: 'eventTicket',
-        barcodeEnabled: false,
-        appearance: {
-            backgroundColor: '#1668c7',
-            foregroundColor: '#ffffff',
-            labelColor: '#fff3b0',
-            backgroundMaskOpacity: 0,
+    return selectEventPreset(
+        {
+            schemaVersion: 1,
+            id: randomId(),
+            eventName: '',
+            timezone: deviceTimezone(),
+            passStyle: 'eventTicket',
+            barcodeEnabled: false,
+            appearance: {
+                backgroundColor: '#1668c7',
+                foregroundColor: '#ffffff',
+                labelColor: '#fff3b0',
+                backgroundMaskOpacity: 0,
+            },
+            warnings: [],
         },
-        warnings: [],
-    }
+        'performance',
+    )
 }

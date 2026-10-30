@@ -39,6 +39,8 @@ Certificate failures return `SIGNING_UNAVAILABLE` without paths or keys. The app
 
 ## Remote signing
 
+Activity presets do not change consent or issuer identity. Inactive metadata and disabled custom text rows stay in the browser and editable JSON, never in a signing request. Enabled attendee names, prices, contacts and custom text are sent with the other ticket fields only after explicit consent. Additional metadata is preserved in pass details; poster event requests also forward supported semantic tags and information links. Real-device and live-provider acceptance of the newly added metadata still requires verification; historical checks below cover the previous field set.
+
 EncorePass calls the [Wallet MCP Pass REST API](https://walletmcppass.com/#api) from the server. It needs no API key and no local Apple certificate.
 
 1. Edit the event, images and style. Without signing consent, export downloads an editable JSON draft.
@@ -70,11 +72,11 @@ Formats map to QR, PDF417, Aztec and Code128, with `altText` fixed to 仅供展�
 
 Only HTTPS download URLs on the fixed provider host are accepted; redirects, credentials, query strings and fragments are rejected. The server checks the response type, file and expanded sizes, signature presence, manifest hashes, returned layout, serial number (when supplied) and barcode. A mismatch blocks the install link. These checks are not Apple trust-chain validation and do not modify the signed archive.
 
-Provider links are valid for about one hour. HTTP 400 maps to a parameter error, 402/429 to quota exhaustion, and 503 to provider capacity. EncorePass never retries, pays or enables updatable passes. Quotas and retention follow the [provider documentation](https://walletmcppass.com/llms-full.txt).
+Provider links are valid for about one hour. HTTP 400 maps to a parameter error, 402/429 to quota exhaustion, and 503 to provider capacity. EncorePass only resubmits smaller images after an explicit create-endpoint HTTP 413; it never retries other failures, pays or enables updatable passes. Quotas and retention follow the [provider documentation](https://walletmcppass.com/llms-full.txt).
 
 ### Troubleshooting
 
-HTTP 413 means the request body is too large, not a network failure. Before sending, the server serializes the whole JSON (including base64 expansion) with a conservative 900 KiB budget. Oversized PNGs are palette-quantized and progressively resized while preserving alpha, aspect ratio, text and barcode data. Small requests are unchanged. If compression still exceeds the budget or the provider returns 413, the server returns `REMOTE_PAYLOAD_TOO_LARGE` and does not retry.
+HTTP 413 from the create endpoint triggers automatic image compression and resubmission. The first request always sends original @3x resources without a local outbound size threshold. Up to four strictly smaller alternatives are tried: lossless optimization, full-size 256-colour and 128-colour artwork/background, then 128 colours at @2x. Logos, icons and thumbnails stay lossless at @3x. All attempts share the 15-second deadline. If the provider still rejects the final alternative (or no smaller encoding exists), return REMOTE_PAYLOAD_TOO_LARGE. Other statuses, network failures, download failures and validation failures never retry. No payments are made. Existing inbound image and request limits still apply.
 
 `127.0.0.1:3000` in the browser is EncorePass, not the signing service. Remote signing connects from the Node server; a browser that can reach the internet does not prove that Node can.
 
